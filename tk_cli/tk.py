@@ -76,6 +76,16 @@ def post_one(ctx, video, caption, tags="", ai_label=False, dry_run=False):
         file_input.set_input_files(str(video))
         print(f"[上传] {video.name} 上传中，等待处理...")
         page.wait_for_timeout(12000)
+        # 移除新手引导遮罩（react-joyride 教程浮层会挡住编辑器点击）
+        try:
+            skip = page.locator("#react-joyride-portal button:has-text('Skip'), #react-joyride-portal button:has-text('跳过'), #react-joyride-portal [aria-label='Skip']").first
+            if skip.count() > 0:
+                skip.click(timeout=3000)
+                page.wait_for_timeout(800)
+        except Exception:
+            pass
+        page.evaluate("document.getElementById('react-joyride-portal')?.remove()")
+        # 填 caption（contenteditable 编辑器）
         editor = page.locator("div[contenteditable='true']").first
         editor.click()
         editor.press_sequentially(full_caption[:2200], delay=5)
