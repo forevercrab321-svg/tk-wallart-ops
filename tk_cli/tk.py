@@ -45,11 +45,23 @@ def cmd_login():
         ctx.close()
 
 
-def is_logged_in(page):
+def is_logged_in(ctx):
+    """通过会话 cookie 判断登录状态（比页面元素检测可靠）。
+    sessionid / sid_tt 任一存在即视为已登录。"""
     try:
+        cookies = ctx.cookies("https://www.tiktok.com")
+        names = {c.get("name", "") for c in cookies}
+        if {"sessionid", "sid_tt", "uid_tt"} & names:
+            return True
+    except Exception:
+        pass
+    try:
+        page = ctx.new_page()
         page.goto(HOME_URL, timeout=45000, wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        return page.locator("[data-e2e='profile-icon'], img.avatar, [data-e2e='nav-profile']").count() > 0
+        page.wait_for_timeout(4000)
+        ok = page.locator("[data-e2e='profile-icon'], img.avatar, [data-e2e='nav-profile']").count() > 0
+        page.close()
+        return ok
     except Exception:
         return False
 
@@ -98,11 +110,9 @@ def cmd_post(args):
     assert video.exists(), f"视频不存在: {video}"
     with sync_playwright() as pw:
         ctx = launch(pw, headless=args.headless)
-        page = ctx.new_page()
-        if not is_logged_in(page):
+        if not is_logged_in(ctx):
             print("[错误] 未登录或会话过期，请先运行: python3 tk.py login")
             ctx.close(); sys.exit(1)
-        page.close()
         post_one(ctx, video, args.caption or "", args.tags or "", args.ai_label, args.dry_run)
         ctx.close()
 
@@ -112,10 +122,8 @@ def cmd_batch(args):
     rows = list(csv.DictReader(open(args.schedule, encoding="utf-8")))
     with sync_playwright() as pw:
         ctx = launch(pw, headless=False)
-        page = ctx.new_page()
-        if not is_logged_in(page):
+        if not is_logged_in(ctx):
             print("[错误] 未登录，请先 login"); ctx.close(); sys.exit(1)
-        page.close()
         for i, r in enumerate(rows):
             if r.get("posted", "").strip().lower() in ("yes", "1", "true"):
                 continue
@@ -130,8 +138,7 @@ def cmd_status():
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         ctx = launch(pw, headless=False)
-        page = ctx.new_page()
-        ok = is_logged_in(page)
+        ok = is_logged_in(ctx)
         print("[状态]", "已登录 ✓" if ok else "未登录 ✗（运行 python3 tk.py login）")
         ctx.close()
 
